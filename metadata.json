@@ -1,0 +1,6 @@
+{
+  "name": "Nil-Son - Promoção e Download de Músicas",
+  "description": "Plataforma de música Nil-Son com tema castanho escuro para streaming, divulgação de artistas e download gratuito.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
