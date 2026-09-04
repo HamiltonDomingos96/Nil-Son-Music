@@ -79,5 +79,6 @@ export interface UserSession {
   role: UserRole;
   genre?: string;
   whatsapp?: string;
+  socialLink?: string;
   registeredAt: string;
 }

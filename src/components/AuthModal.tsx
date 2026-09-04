@@ -12,9 +12,11 @@ import {
   Eye, 
   EyeOff, 
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Link2
 } from 'lucide-react';
 import { UserSession, UserRole } from '../types';
+import { syncUserToFirebase } from '../services/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -52,6 +54,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [password, setPassword] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [genre, setGenre] = useState(ARTIST_GENRES[0]);
+  const [socialLink, setSocialLink] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Login fields
@@ -73,9 +76,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const trimmedName = name.trim();
     const trimmedPass = password.trim();
     const trimmedWa = whatsapp.trim();
+    const trimmedSocial = socialLink.trim();
 
     if (!trimmedName) {
-      setErrorMsg(isArtist ? 'Por favor, insira o seu Nome Artístico.' : 'Por favor, insira o seu Nome Completo.');
+      setErrorMsg(isArtist ? 'Por favor, insira o seu Nome Artístico / Nome de Palco.' : 'Por favor, insira o seu Nome Completo.');
       return;
     }
 
@@ -90,7 +94,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     if (isArtist && !trimmedWa) {
-      setErrorMsg('O número de WhatsApp é obrigatório para o Perfil de Artista.');
+      setErrorMsg('O número de WhatsApp / Booking é obrigatório para o Perfil de Artista.');
       return;
     }
 
@@ -105,10 +109,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       role,
       genre: isArtist ? genre : undefined,
       whatsapp: trimmedWa || undefined,
+      socialLink: isArtist && trimmedSocial ? trimmedSocial : undefined,
       registeredAt: new Date().toISOString()
     };
 
-    // 1. Guardar a sessão do utilizador localmente
+    // 1. Guardar a sessão do utilizador localmente (LocalStorage)
     try {
       localStorage.setItem('user_session', JSON.stringify(newSession));
       
@@ -124,14 +129,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       console.warn('Erro ao salvar no localStorage:', err);
     }
 
-    // 2. Formatar mensagem para WhatsApp (wa.me)
+    // 2. Sincronizar em tempo real com o Firebase Realtime Database
+    syncUserToFirebase(newSession).catch(err => {
+      console.warn('Sync Firebase aviso:', err);
+    });
+
+    // 3. Formatar mensagem limpa e estruturada para WhatsApp (integração wa.me)
     let messageText = '';
     if (isArtist) {
       messageText = 
 `🎤 *SOLICITAÇÃO DE PERFIL DE ARTISTA - PORTAL NILSON*
-• Nome Artístico : ${trimmedName}
+• Nome Artístico: ${trimmedName}
 • Género Musical: ${genre}
-• Contacto: ${trimmedWa}`;
+• Contacto/Booking: ${trimmedWa || 'Não informado'}
+• Redes Sociais: ${trimmedSocial || 'Não informado'}`;
     } else {
       messageText = 
 `📌 *NOVO CADASTRO DE OUVINTE - PORTAL NILSON*
@@ -142,10 +153,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const encodedText = encodeURIComponent(messageText);
     const waUrl = `https://wa.me/${WHATSAPP_SUPPORT_NUMBER}?text=${encodedText}`;
 
-    // 3. Notificar sucesso no app
+    // 4. Notificar sucesso no app
     onAuthSuccess(newSession, true);
 
-    // 4. Redirecionar para o WhatsApp oficial via wa.me
+    // 5. Redirecionar para o WhatsApp oficial via wa.me
     setTimeout(() => {
       window.open(waUrl, '_blank', 'noopener,noreferrer');
       setIsLoading(false);
@@ -495,11 +506,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                   </div>
 
-                  {/* 4. Número de WhatsApp (Obrigatório) */}
+                  {/* 4. Número de WhatsApp / Booking (Obrigatório) */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-semibold text-[#ded0c5]">
-                        Número de WhatsApp <span className="text-[#e59a38]">*</span>
+                        Número de WhatsApp / Booking <span className="text-[#e59a38]">*</span>
                       </label>
                       <span className="text-[10px] text-[#e59a38] bg-[#e59a38]/15 px-2 py-0.5 rounded font-bold">Obrigatório</span>
                     </div>
@@ -517,6 +528,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                     <p className="text-[10px] text-[#9c8777] mt-1">
                       Necessário para validação de perfil de artista e liberação de uploads.
+                    </p>
+                  </div>
+
+                  {/* 5. Link do Perfil de Redes Sociais */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#ded0c5] mb-1.5">
+                      Link do Perfil de Redes Sociais (Instagram, Facebook ou YouTube)
+                    </label>
+                    <div className="relative">
+                      <Link2 className="w-4 h-4 text-[#a89383] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        id="input-artist-social"
+                        type="url"
+                        value={socialLink}
+                        onChange={(e) => setSocialLink(e.target.value)}
+                        placeholder="https://instagram.com/seunome ou youtube.com/..."
+                        className="w-full bg-[#120d09] border border-[#2e1d13] focus:border-[#e59a38] rounded-xl pl-10 pr-4 py-2.5 text-sm text-[#fdfaf6] placeholder-[#7d695b] outline-none transition-colors"
+                      />
+                    </div>
+                    <p className="text-[10px] text-[#9c8777] mt-1">
+                      Ajuda nossa equipa a verificar a sua identidade artística.
                     </p>
                   </div>
                 </div>

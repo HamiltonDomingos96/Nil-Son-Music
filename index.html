@@ -12,6 +12,31 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Firebase Realtime Database CDN -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script>
+      const firebaseConfig = {
+        apiKey: "INSERIR_API_KEY_AQUI",
+        authDomain: "planning-with-ai-a3d22.firebaseapp.com",
+        databaseURL: "https://planning-with-ai-a3d22-default-rtdb.firebaseio.com/",
+        projectId: "planning-with-ai-a3d22",
+        storageBucket: "planning-with-ai-a3d22.appspot.com",
+        messagingSenderId: "INSERIR_SENDER_ID_AQUI",
+        appId: "INSERIR_APP_ID_AQUI"
+      };
+
+      try {
+        if (typeof firebase !== 'undefined') {
+          firebase.initializeApp(firebaseConfig);
+          const database = firebase.database();
+          window.firebaseDatabase = database;
+        }
+      } catch (err) {
+        console.warn("Aviso de inicialização do Firebase RTDB:", err);
+      }
+    </script>
   </head>
   <body class="bg-[#0f0b08] text-[#fdfaf6] font-['Plus_Jakarta_Sans',sans-serif] selection:bg-[#e59a38] selection:text-[#120d09] antialiased overflow-hidden">
     <div id="root"></div>

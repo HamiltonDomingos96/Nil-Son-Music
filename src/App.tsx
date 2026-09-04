@@ -30,6 +30,12 @@ import { QueueDrawer } from './components/QueueDrawer';
 import { CreatePlaylistModal } from './components/CreatePlaylistModal';
 import { ToastNotification } from './components/ToastNotification';
 import { AuthModal } from './components/AuthModal';
+import { 
+  syncFavoritesToFirebase, 
+  fetchFavoritesFromFirebase, 
+  syncPlaylistsToFirebase, 
+  submitPromotionToFirebase 
+} from './services/firebase';
 
 // Views
 import { HomeView } from './components/views/HomeView';
@@ -304,8 +310,56 @@ export default function App() {
     showToast(next ? 'Repetição de faixa ativada' : 'Repetição de faixa desativada');
   }, [isLoop, showToast]);
 
-  // Likes & Favorites
+  // Auth session callbacks
+  const handleAuthSuccess = useCallback((session: UserSession, isNewRegister?: boolean) => {
+    setUserSession(session);
+    // Load this user's liked tracks
+    const savedLikes = localStorage.getItem(`user_${session.id}_liked_tracks`);
+    if (savedLikes) {
+      try {
+        setLikedTrackIds(new Set(JSON.parse(savedLikes)));
+      } catch {}
+    }
+    // Also try fetch from Firebase RTDB
+    fetchFavoritesFromFirebase(session.id).then((cloudLikes) => {
+      if (cloudLikes && cloudLikes.length > 0) {
+        setLikedTrackIds((prev) => new Set([...Array.from(prev), ...cloudLikes]));
+      }
+    }).catch(console.warn);
+
+    // Load this user's custom playlists
+    const savedPls = localStorage.getItem(`user_${session.id}_playlists`);
+    if (savedPls) {
+      try {
+        const parsed: Playlist[] = JSON.parse(savedPls);
+        setPlaylists((prev) => {
+          const defaults = prev.filter(p => !p.isCustom);
+          return [...defaults, ...parsed];
+        });
+      } catch {}
+    }
+
+    if (isNewRegister) {
+      showToast(`Bem-vindo ao Portal Nil-Son, ${session.name}!`);
+    } else {
+      showToast(`Olá, ${session.name}! Sessão iniciada.`);
+    }
+  }, [showToast]);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('user_session');
+    setUserSession(null);
+    showToast('Sessão encerrada com sucesso.');
+  }, [showToast]);
+
+  // Likes & Favorites (requiring auth for persistent account sync)
   const handleToggleLike = useCallback((trackId: string) => {
+    if (!userSession) {
+      showToast('Entre ou cadastre-se para favoritar músicas');
+      handleOpenAuthModal('register');
+      return;
+    }
+
     setLikedTrackIds((prev) => {
       const next = new Set(prev);
       if (next.has(trackId)) {
@@ -315,9 +369,12 @@ export default function App() {
         next.add(trackId);
         showToast('Adicionada às Músicas Curtidas ❤️');
       }
+      const arr = Array.from(next) as string[];
+      localStorage.setItem(`user_${userSession.id}_liked_tracks`, JSON.stringify(arr));
+      syncFavoritesToFirebase(userSession.id, arr).catch(console.warn);
       return next;
     });
-  }, [showToast]);
+  }, [userSession, showToast]);
 
   // Queue Operations
   const handleAddToQueue = useCallback((track: Track) => {
@@ -377,10 +434,12 @@ export default function App() {
       promoTagline: newTrack.promoTagline || 'NOVO LANÇAMENTO OFICIAL NO NIL-SON • DISPONÍVEL AGORA',
     };
     setTracks((prev) => [releaseTrack, ...prev]);
+    // Sincroniza pedido no Firebase Realtime Database
+    submitPromotionToFirebase(releaseTrack, userSession).catch(console.warn);
     handlePlayTrack(releaseTrack);
     navigateTo('releases');
     showToast(`"${releaseTrack.title}" adicionada como Novo Lançamento! 🚀`);
-  }, [handlePlayTrack, navigateTo, showToast]);
+  }, [userSession, handlePlayTrack, navigateTo, showToast]);
 
   // Set any track as new release
   const handleSetAsNewRelease = useCallback((track: Track) => {
@@ -396,13 +455,30 @@ export default function App() {
     navigateTo('releases');
   }, [navigateTo, showToast]);
 
-  // Create Playlist
+  // Create Playlist & Open Handler
+  const handleOpenCreatePlaylist = useCallback(() => {
+    if (!userSession) {
+      showToast('Entre ou cadastre-se para criar playlists');
+      handleOpenAuthModal('register');
+      return;
+    }
+    setIsCreatePlaylistOpen(true);
+  }, [userSession, showToast]);
+
   const handleCreatePlaylist = useCallback((newPlaylist: Playlist) => {
-    setPlaylists((prev) => [newPlaylist, ...prev]);
+    setPlaylists((prev) => {
+      const updated = [newPlaylist, ...prev];
+      if (userSession) {
+        const customOnly = updated.filter(p => p.isCustom);
+        localStorage.setItem(`user_${userSession.id}_playlists`, JSON.stringify(customOnly));
+        syncPlaylistsToFirebase(userSession.id, updated).catch(console.warn);
+      }
+      return updated;
+    });
     showToast(`Playlist "${newPlaylist.title}" criada!`);
     setSelectedPlaylistId(newPlaylist.id);
     setCurrentView('playlist-detail');
-  }, [showToast]);
+  }, [userSession, showToast]);
 
   // Share Track
   const handleShareTrack = useCallback((track: Track) => {
@@ -501,7 +577,9 @@ export default function App() {
             playlists={playlists}
             likedCount={likedTrackIds.size}
             onOpenPromoteModal={() => setIsPromoteModalOpen(true)}
-            onCreatePlaylist={() => setIsCreatePlaylistOpen(true)}
+            onCreatePlaylist={handleOpenCreatePlaylist}
+            userSession={userSession}
+            onOpenAuthModal={handleOpenAuthModal}
           />
         </div>
 
@@ -523,8 +601,10 @@ export default function App() {
                 }}
                 onCreatePlaylist={() => {
                   setIsMobileSidebarOpen(false);
-                  setIsCreatePlaylistOpen(true);
+                  handleOpenCreatePlaylist();
                 }}
+                userSession={userSession}
+                onOpenAuthModal={handleOpenAuthModal}
               />
             </div>
           </div>
@@ -550,6 +630,10 @@ export default function App() {
             onNavigateForward={handleNavigateForward}
             canGoBack={historyIndex > 0}
             canGoForward={historyIndex < navHistory.length - 1}
+            totalDownloadsCount={totalDownloadsToday}
+            userSession={userSession}
+            onOpenAuthModal={handleOpenAuthModal}
+            onLogout={handleLogout}
           />
 
           {/* Central Scrollable Container */}
@@ -673,8 +757,10 @@ export default function App() {
                 onPlayToggle={handlePlayTrack}
                 onOpenDownloadModal={handleOpenDownloadModal}
                 onToggleLike={handleToggleLike}
-                onCreatePlaylist={() => setIsCreatePlaylistOpen(true)}
+                onCreatePlaylist={handleOpenCreatePlaylist}
                 onSelectPlaylist={(plId) => navigateTo('playlist-detail', plId)}
+                userSession={userSession}
+                onOpenAuthModal={handleOpenAuthModal}
               />
             )}
 
@@ -691,8 +777,10 @@ export default function App() {
                 onPlayToggle={handlePlayTrack}
                 onOpenDownloadModal={handleOpenDownloadModal}
                 onToggleLike={handleToggleLike}
-                onCreatePlaylist={() => setIsCreatePlaylistOpen(true)}
+                onCreatePlaylist={handleOpenCreatePlaylist}
                 onSelectPlaylist={(plId) => navigateTo('playlist-detail', plId)}
+                userSession={userSession}
+                onOpenAuthModal={handleOpenAuthModal}
               />
             )}
 
@@ -787,12 +875,23 @@ export default function App() {
         onClose={() => setIsPromoteModalOpen(false)}
         onSubmitTrack={handlePromoteTrackSubmit}
         onShowToast={showToast}
+        userSession={userSession}
+        onOpenAuthModal={handleOpenAuthModal}
       />
 
       <CreatePlaylistModal
         isOpen={isCreatePlaylistOpen}
         onClose={() => setIsCreatePlaylistOpen(false)}
         onCreate={handleCreatePlaylist}
+      />
+
+      {/* Modal de Autenticação e Perfil Nil-Son */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        initialMode={authModalMode}
+        initialRole={authModalRole}
       />
 
       {/* Global Toast Notification */}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Heart, Library, PlusSquare, ArrowDownToLine, Music2, FolderHeart, Play } from 'lucide-react';
-import { Track, Playlist } from '../../types';
+import { Heart, Library, PlusSquare, ArrowDownToLine, Music2, FolderHeart, Play, Cloud, Check, Sparkles } from 'lucide-react';
+import { Track, Playlist, UserSession } from '../../types';
 import { TrackRow } from '../TrackRow';
 import { TrackCard } from '../TrackCard';
 
@@ -17,6 +17,8 @@ interface LibraryViewProps {
   onToggleLike: (trackId: string) => void;
   onCreatePlaylist: () => void;
   onSelectPlaylist: (playlistId: string) => void;
+  userSession?: UserSession | null;
+  onOpenAuthModal?: (mode?: 'login' | 'register') => void;
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({
@@ -31,7 +33,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onOpenDownloadModal,
   onToggleLike,
   onCreatePlaylist,
-  onSelectPlaylist
+  onSelectPlaylist,
+  userSession,
+  onOpenAuthModal
 }) => {
   const [activeTab, setActiveTab] = useState<'liked' | 'playlists' | 'downloads'>('liked');
 
@@ -45,19 +49,46 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <Library className="w-8 h-8" />
             </div>
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[#e59a38]">Coleção Pessoal</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#e59a38]">Coleção Pessoal</span>
+                {userSession ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">
+                    <Cloud className="w-3 h-3" />
+                    Firebase RTDB Conectado
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-[#312015] text-[#bda998] px-2 py-0.5 rounded-full font-semibold">
+                    Armazenamento Local
+                  </span>
+                )}
+              </div>
               <h1 className="text-3xl md:text-4xl font-black text-white">Sua Biblioteca Nil-Son</h1>
-              <p className="text-sm text-[#ded0c5]">Suas músicas curtidas, playlists criadas e histórico de downloads</p>
+              <p className="text-sm text-[#ded0c5]">
+                {userSession 
+                  ? `Conta de ${userSession.role === 'artist' ? 'Artista' : 'Ouvinte'}: ${userSession.name} • Sincronizada em tempo real`
+                  : 'Suas músicas curtidas, playlists criadas e histórico de downloads'}
+              </p>
             </div>
           </div>
 
-          <button
-            onClick={onCreatePlaylist}
-            className="flex items-center gap-2 bg-[#241710] hover:bg-[#301f15] text-[#fdfaf6] font-bold text-xs px-4 py-2.5 rounded-full border border-[#3d2719] transition-all"
-          >
-            <PlusSquare className="w-4 h-4 text-[#e59a38]" />
-            <span>Criar Playlist</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {!userSession && onOpenAuthModal && (
+              <button
+                onClick={() => onOpenAuthModal('register')}
+                className="flex items-center gap-1.5 bg-[#e59a38] hover:bg-[#f5a746] text-[#120d09] font-black text-xs px-4 py-2.5 rounded-full transition-all shadow"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Entrar / Cadastrar</span>
+              </button>
+            )}
+            <button
+              onClick={onCreatePlaylist}
+              className="flex items-center gap-2 bg-[#241710] hover:bg-[#301f15] text-[#fdfaf6] font-bold text-xs px-4 py-2.5 rounded-full border border-[#3d2719] transition-all"
+            >
+              <PlusSquare className="w-4 h-4 text-[#e59a38]" />
+              <span>Criar Playlist</span>
+            </button>
+          </div>
         </div>
       </div>
 
